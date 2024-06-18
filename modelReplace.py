@@ -6,18 +6,23 @@ import gc
 from mathutils import Vector
 import os
 import random
-
+import time
 import sys
-sys.path.append('C:/CityGeneration/replacement/BlenderScene')
+sys.path.append('C:/CityGeneration/replacement/BlenderScene/memoryMinor')
 
 import modeAsset
 
-import Circle_tool_old as ct
+# 记录程序开始时间
+start_time = time.time()
+
 import onlyLot as ol
+import Circle_Tool as ct
 
 
-#模型文件路径
-fbx_filepath = "C:/CityGeneration/replacement/BuildingModels/high_01.fbx"
+
+
+##模型文件路径
+#fbx_filepath = "C:/CityGeneration/replacement/BuildingModels/high_01.fbx"
 
 
 class modelReplace:
@@ -45,8 +50,6 @@ class modelReplace:
                 modelReplace.Reset__model_origin(instance)
                 return [instance]  # 如果模型已经存在，返回实例
 
-        # 导入模型
-        bpy.ops.import_scene.fbx(filepath=fbx_filepath)
 
         # 获取导入的对象
         imported_objects = bpy.context.selected_objects
@@ -69,8 +72,6 @@ class modelReplace:
         """
         # 创建Circumscribed_circle的实例
         #cc = ct.Circumscribed_circle() 
-        print("Scaling_ratio_lot:",lot.type)
-        print("Scaling_ratio_BuildingModel:",BuildingModel.type)
         
         #模型的地面外接圆半径
         model_z_radius = ct.Circumscribed_circle.get_circumscribed_circle(BuildingModel)
@@ -81,9 +82,10 @@ class modelReplace:
         #地块多边形的内接圆半径
         lot_inCircle, lot_inCircle_coordinates = ct.Inscribed_circle.scene_setup(lot)
 
-        
+        print("lot_inCircle:",lot_inCircle)
         #缩放比例确定
         scale_ratio = lot_inCircle / model_z_radius
+        print(lot.name+"scale_ratio:",scale_ratio)
         
        
         return scale_ratio,lot_inCircle_coordinates
@@ -124,43 +126,94 @@ class modelReplace:
     
 
 
-import loadmodel
+
+#加载后的资产模型，需要在场景中隐藏掉
+def model_hide(obj_name):
+    view_layer = bpy.context.view_layer
+    if obj_name in view_layer.objects:
+        obj = bpy.data.objects.get(obj_name)
+        obj.hide_set(True)
+        obj.hide_render = True
+        obj.hide_viewport = True
+        return obj
+    else:
+        return None
 
 
+Assestlist = modeAsset.modelAssetList(15)
 
 
-
-Assestlist = modeAsset.modelAssetList(10)
-lots = ol.lot_Count()
+lots = ol.lot_loads()
 # assets load method 
        
 
 for lot_name in lots:
-    lot=bpy.data.objects[lot_name]
+    lot = bpy.data.objects[lot_name]
+    
     # assets load method        
-    obj_name = random.choice(Assestlist)
+    tl_obname = random.choice(Assestlist)
+    
     
     # 将对象链接到当前场景
-    obj = bpy.data.objects.get(obj_name)
-    if obj:
-        obj_copy = obj.copy()
-        obj_copy.data = obj.data.copy()
-        
-    #缩放楼房模型大小
-    scal_ratio,lot_inCircle_coordinates = modelReplace.Scaling_ratio(lot, obj_copy)
-
-    obj_copy.scale *= scal_ratio
-    #移动楼房模型
-    obj_copy.location = lot_inCircle_coordinates
-    # 链接到当前场景
-    bpy.context.collection.objects.link(obj_copy)
-
-
-
+#    obj = bpy.data.objects.get(obj_name)
+    
+    tl_obj = bpy.data.objects.get(tl_obname)
+   
+    # 将对象添加到当前视图图层
+    view_layer = bpy.context.view_layer
     
 
-    gc.collect()
+    
+    if tl_obname not in view_layer.objects:  
+        # 将复制后的对象添加到当前视图图层
+        view_layer.active_layer_collection.collection.objects.link(tl_obj)
 
+        
+    
+    if tl_obj:
+        #计算多边形地块内接圆      
+        lot_inCircle, tl_location = ct.Inscribed_circle.scene_setup(lot)
+        
+        
+        ac_location = (tl_location[0] - tl_obj.location[0], tl_location[1] - tl_obj.location[1], tl_location[2] - tl_obj.location[2])
+        
+        #print('tl_location:',tl_location)
+        
+        # 清除之前选定的对象
+        bpy.ops.object.select_all(action='DESELECT')
+        
+
+        tl_obj.select_set(True)
+                
+        bpy.ops.object.duplicate_move_linked(
+            OBJECT_OT_duplicate={"linked": True},
+            TRANSFORM_OT_translate={"value": ac_location}
+        )
+        
+        
+        # 将复制后的对象添加到当前视图图层
+        duplicated_obj = bpy.context.selected_objects[0]
+                      
+        #缩放楼房模型大小
+        scal_ratio,x = modelReplace.Scaling_ratio(lot, tl_obj)
+        
+    
+        #scale duplicated_obj models
+        duplicated_obj.scale = (scal_ratio, scal_ratio, scal_ratio)
+        
+
+        tl_obj.select_set(False)
+
+
+for obj_name in Assestlist:
+    model_hide(obj_name)
+# 记录程序结束时间
+end_time = time.time()
+# 计算程序运行时间，并打印出来
+total_time = end_time - start_time
+print("程序运行时间：{:.2f} 秒".format(total_time))
+
+#bpy.ops.wm.read_homefile() 恢复为带有用户设置的初始状态 
 
             
 
